@@ -33,6 +33,7 @@ public:
   // Override all functions from Instance which can result in changing the size
   // of the underlying buffer.
   void add(const void* data, uint64_t size) override;
+  void addBufferFragment(BufferFragment& fragment) override;
   void add(absl::string_view data) override;
   void add(const Instance& data) override;
   void prepend(absl::string_view data) override;

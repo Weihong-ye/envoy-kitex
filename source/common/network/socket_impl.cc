@@ -91,7 +91,12 @@ Api::SysCallIntResult SocketImpl::bind(Network::Address::InstanceConstSharedPtr 
   return bind_result;
 }
 
-Api::SysCallIntResult SocketImpl::listen(int backlog) { return io_handle_->listen(backlog); }
+Api::SysCallIntResult SocketImpl::listen(int backlog) {
+  if (backlog <= 0) {
+    backlog = 1024;
+  }
+  return io_handle_->listen(backlog);
+}
 
 Api::SysCallIntResult SocketImpl::connect(const Network::Address::InstanceConstSharedPtr address) {
   auto result = io_handle_->connect(address);
