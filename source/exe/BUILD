@@ -174,7 +174,7 @@ envoy_cc_library(
         "//source/common/formatter:formatter_extension_lib",
         "//source/server:options_lib",
         # TODO(wbpcode) make this a proper extension
-        "//source/extensions/filters/http/match_delegate:config",
+     #   "//source/extensions/filters/http/match_delegate:config",
         "//source/common/http:rds_lib",
         "//source/common/router:rds_lib",
         "//source/common/router:scoped_rds_lib",

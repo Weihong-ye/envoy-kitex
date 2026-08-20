@@ -9,6 +9,9 @@
 #include "source/common/common/utility.h"
 #include "source/common/network/address_impl.h"
 #include "source/common/network/io_socket_handle_impl.h"
+#if defined(__linux__) && !defined(__ANDROID_API__)
+#include "source/common/network/ub_socket_handle_impl.h"
+#endif
 #include "source/common/network/win32_socket_handle_impl.h"
 
 #if defined(__linux__) && !defined(__ANDROID_API__) && defined(ENVOY_ENABLE_IO_URING)
@@ -40,6 +43,12 @@ IoHandlePtr SocketInterfaceImpl::makePlatformSpecificSocket(
   if constexpr (Event::PlatformDefaultTriggerType == Event::FileTriggerType::EmulatedEdge) {
     return std::make_unique<Win32SocketHandleImpl>(socket_fd, socket_v6only, domain);
   }
+#if defined(__linux__) && !defined(__ANDROID_API__)
+  if (domain == UbsocketAddressFamily) {
+    return std::make_unique<UbSocketHandleImpl>(socket_fd, socket_v6only, domain,
+                                                options.max_addresses_cache_size_);
+  }
+#endif
 #if defined(__linux__) && !defined(__ANDROID_API__) && defined(ENVOY_ENABLE_IO_URING)
   // Only create IoUringSocketHandleImpl when the IoUringWorkerFactory has been created and it has
   // been registered in the TLS, initialized. There are cases that test may create threads before
@@ -140,8 +149,28 @@ IoHandlePtr SocketInterfaceImpl::socket(Socket::Type socket_type,
     v6only = addr->ip()->ipv6()->v6only();
   }
 
+#if defined(__linux__) && !defined(__ANDROID_API__)
+  const bool use_smc = socket_type == Socket::Type::Stream && addr->type() == Address::Type::Ip &&
+                       ip_version == Address::IpVersion::v4 &&
+                       (addr->ip()->addressAsString() == "141.61.17.202" ||
+                        addr->ip()->addressAsString() == "141.61.17.204");
+
+  IoHandlePtr io_handle;
+  if (use_smc) {
+    const int flags = SOCK_NONBLOCK | SOCK_STREAM;
+    const Api::SysCallSocketResult result =
+        Api::OsSysCallsSingleton::get().socket(UbsocketAddressFamily, flags, 0);
+    RELEASE_ASSERT(SOCKET_VALID(result.return_value_),
+                   fmt::format("socket(AF_SMC) failed: {}", errorDetails(result.errno_)));
+    io_handle =
+        makeSocket(result.return_value_, v6only, socket_type, UbsocketAddressFamily, options);
+  } else {
+    io_handle = SocketInterfaceImpl::socket(socket_type, addr->type(), ip_version, v6only, options);
+  }
+#else
   IoHandlePtr io_handle =
       SocketInterfaceImpl::socket(socket_type, addr->type(), ip_version, v6only, options);
+#endif
   if (io_handle && addr->type() == Address::Type::Ip && ip_version == Address::IpVersion::v6 &&
       !Address::forceV6()) {
     // Setting IPV6_V6ONLY restricts the IPv6 socket to IPv6 connections only.

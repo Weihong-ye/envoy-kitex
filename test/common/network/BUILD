@@ -503,6 +503,38 @@ envoy_cc_test(
     ],
 )
 
+envoy_cc_test(
+    name = "ub_socket_handle_impl_test",
+    srcs = select({
+        "//bazel:linux": ["ub_socket_handle_impl_test.cc"],
+        "//conditions:default": [],
+    }),
+    linkopts = select({
+        "//bazel:linux": [
+            "-Wl,--export-dynamic",
+            "-Wl,--undefined=ubsocket_iobuf_alloc",
+            "-Wl,--undefined=ubsocket_iobuf_chain_pop_front",
+            "-Wl,--undefined=ubsocket_iobuf_chain_release",
+            "-Wl,--undefined=ubsocket_iobuf_data",
+            "-Wl,--undefined=ubsocket_iobuf_payload_capacity",
+            "-Wl,--undefined=ubsocket_iobuf_query",
+            "-Wl,--undefined=ubsocket_iobuf_release",
+            "-Wl,--undefined=ubsocket_iobuf_size",
+            "-Wl,--undefined=ubsocket_recv_zc",
+            "-Wl,--undefined=ubsocket_writev",
+            "-Wl,--undefined=ubsocket_writev_copy",
+        ],
+        "//conditions:default": [],
+    }),
+    deps = [
+        "//source/common/buffer:buffer_lib",
+        "//source/common/network:default_socket_interface_lib",
+        "//test/mocks/api:api_mocks",
+        "//test/test_common:threadsafe_singleton_injector_lib",
+        "@abseil-cpp//absl/strings",
+    ],
+)
+
 envoy_cc_benchmark_binary(
     name = "io_socket_handle_impl_benchmark",
     srcs = ["io_socket_handle_impl_benchmark_test.cc"],

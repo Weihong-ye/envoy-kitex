@@ -326,7 +326,7 @@ struct mmsghdr {
 
 #if defined(__linux__)
 // On Linux, default listen backlog size to net.core.somaxconn which is runtime configurable
-#define ENVOY_TCP_BACKLOG_SIZE -1
+#define ENVOY_TCP_BACKLOG_SIZE 1024
 #else
 // On non-Linux platforms use 128 which is libevent listener default
 #define ENVOY_TCP_BACKLOG_SIZE 128

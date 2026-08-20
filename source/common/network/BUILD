@@ -261,6 +261,9 @@ envoy_cc_library(
         "socket_interface_impl.cc",
         "win32_socket_handle_impl.cc",
     ] + select({
+        "//bazel:linux": ["ub_socket_handle_impl.cc"],
+        "//conditions:default": [],
+    }) + select({
         "//bazel:android": [],
         "//bazel:liburing_enabled": [
             "io_uring_socket_handle_impl.cc",
@@ -273,6 +276,9 @@ envoy_cc_library(
         "socket_interface_impl.h",
         "win32_socket_handle_impl.h",
     ] + select({
+        "//bazel:linux": ["ub_socket_handle_impl.h"],
+        "//conditions:default": [],
+    }) + select({
         "//bazel:android": [],
         "//bazel:liburing_enabled": [
             "io_uring_socket_handle_impl.h",
