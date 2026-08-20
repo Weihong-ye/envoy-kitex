@@ -503,6 +503,29 @@ envoy_cc_test(
     ],
 )
 
+envoy_cc_test(
+    name = "ub_socket_handle_impl_test",
+    srcs = select({
+        "//bazel:linux": ["ub_socket_handle_impl_test.cc"],
+        "//conditions:default": [],
+    }),
+    linkopts = select({
+        "//bazel:linux": [
+            "-Wl,--export-dynamic",
+            "-Wl,--undefined=ubsocket_iobuf_allocate",
+            "-Wl,--undefined=ubsocket_iobuf_deallocate",
+            "-Wl,--undefined=ubsocket_readv",
+            "-Wl,--undefined=ubsocket_writev",
+        ],
+        "//conditions:default": [],
+    }),
+    deps = [
+        "//source/common/buffer:buffer_lib",
+        "//source/common/network:default_socket_interface_lib",
+        "@abseil-cpp//absl/strings",
+    ],
+)
+
 envoy_cc_benchmark_binary(
     name = "io_socket_handle_impl_benchmark",
     srcs = ["io_socket_handle_impl_benchmark_test.cc"],

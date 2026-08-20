@@ -68,6 +68,22 @@ TEST_F(WatermarkBufferTest, AddBuffer) {
   EXPECT_EQ(11, buffer_.length());
 }
 
+TEST_F(WatermarkBufferTest, AddBufferFragment) {
+  bool released = false;
+  BufferFragmentImpl fragment(
+      "hello world", 11,
+      [&released](const void*, size_t, const BufferFragmentImpl*) { released = true; });
+
+  buffer_.addBufferFragment(fragment);
+  EXPECT_EQ(1, times_high_watermark_called_);
+  EXPECT_EQ(11, buffer_.length());
+  EXPECT_FALSE(released);
+
+  buffer_.drain(buffer_.length());
+  EXPECT_EQ(1, times_low_watermark_called_);
+  EXPECT_TRUE(released);
+}
+
 TEST_F(WatermarkBufferTest, Prepend) {
   std::string suffix = "World!", prefix = "Hello, ";
 
