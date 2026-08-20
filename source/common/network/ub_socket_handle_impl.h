@@ -16,7 +16,7 @@ constexpr int UbsocketAddressFamily = 43;
 
 namespace Ubsocket {
 
-constexpr size_t BlockSize = 64 * 1024;
+constexpr size_t BlockSize = 8 * 1024;
 
 // PR9 exposes its zero-copy data path through the brpc-compatible block ABI. Keep this layout in
 // sync with ock::ubs::Block and ub_bench_epoll_zc.cpp.
@@ -35,6 +35,8 @@ struct Block {
 
 static_assert(sizeof(Block) == 32, "UBSocket block ABI changed");
 constexpr size_t BlockPayloadCapacity = BlockSize - sizeof(Block);
+static_assert(BlockSize == 8192, "UBSocket default RC_TP block size changed");
+static_assert(BlockPayloadCapacity == 8160, "UBSocket default RC_TP payload size changed");
 
 class Api {
 public:

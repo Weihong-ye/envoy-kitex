@@ -103,6 +103,21 @@ TEST_F(UbSocketHandleImplTest, StagesHeapSlicesAndCallsExplicitWritev) {
   EXPECT_TRUE(state_.allocations.empty());
 }
 
+TEST_F(UbSocketHandleImplTest, SplitsSixteenKiBSliceIntoEightKiBBlocks) {
+  std::string data(16 * 1024, 'a');
+  Buffer::RawSlice slice{data.data(), data.size()};
+  UbSocketHandleImpl handle(42, false, UbsocketAddressFamily);
+
+  Api::IoCallUint64Result result = handle.writev(&slice, 1);
+
+  ASSERT_TRUE(result.ok());
+  EXPECT_EQ(data.size(), result.return_value_);
+  EXPECT_EQ(data, state_.written);
+  EXPECT_EQ(3, state_.alloc_calls);
+  EXPECT_EQ(3, state_.dealloc_calls);
+  EXPECT_TRUE(state_.allocations.empty());
+}
+
 TEST_F(UbSocketHandleImplTest, PropagatesFailClosedWriteWithoutPosixFallback) {
   state_.write_error = EPROTONOSUPPORT;
   std::string data = "fallback must fail";
