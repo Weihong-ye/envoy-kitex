@@ -2,6 +2,9 @@
 
 #include "source/common/common/macros.h"
 #include "source/common/kitex_probe/probe.h"
+#if defined(__linux__)
+#include "source/common/network/ub_socket_handle_impl.h"
+#endif
 
 #include "envoy/common/exception.h"
 #include "envoy/event/dispatcher.h"
@@ -14,6 +17,51 @@ namespace Envoy {
 namespace Extensions {
 namespace NetworkFilters {
 namespace ThriftProxy {
+
+#if defined(__linux__)
+namespace {
+
+enum class PassthroughGateResult { Active, ConfigOff, NoRpc, FilterRejected };
+
+struct PassthroughGateStats {
+  uint64_t checks{0};
+  uint64_t active{0};
+  uint64_t config_off{0};
+  uint64_t no_rpc{0};
+  uint64_t filter_rejected{0};
+};
+
+void recordPassthroughGate(PassthroughGateResult result) {
+  if (!Network::Ubsocket::diagnosticsLoggingEnabled()) {
+    return;
+  }
+  static thread_local PassthroughGateStats stats;
+  ++stats.checks;
+  switch (result) {
+  case PassthroughGateResult::Active:
+    ++stats.active;
+    break;
+  case PassthroughGateResult::ConfigOff:
+    ++stats.config_off;
+    break;
+  case PassthroughGateResult::NoRpc:
+    ++stats.no_rpc;
+    break;
+  case PassthroughGateResult::FilterRejected:
+    ++stats.filter_rejected;
+    break;
+  }
+  if (!Network::Ubsocket::diagnosticsStatsLogDue(stats.checks)) {
+    return;
+  }
+  ENVOY_LOG_MISC(info,
+                 "[UB_ZC_THRIFT_GATE] checks={} active={} config_off={} no_rpc={} "
+                 "filter_rejected={}",
+                 stats.checks, stats.active, stats.config_off, stats.no_rpc, stats.filter_rejected);
+}
+
+} // namespace
+#endif
 
 ConnectionManager::ConnectionManager(const ConfigSharedPtr& config,
                                      Random::RandomGenerator& random_generator,
@@ -241,6 +289,9 @@ bool ConnectionManager::ResponseDecoder::passthroughEnabled() const {
 
 bool ConnectionManager::passthroughEnabled() const {
   if (!config_->payloadPassthrough()) {
+#if defined(__linux__)
+    recordPassthroughGate(PassthroughGateResult::ConfigOff);
+#endif
     return false;
   }
 
@@ -250,10 +301,18 @@ bool ConnectionManager::passthroughEnabled() const {
   // responses as long as the transport is framed and the protocol is
   // not Twitter.
   if (rpcs_.empty()) {
+#if defined(__linux__)
+    recordPassthroughGate(PassthroughGateResult::NoRpc);
+#endif
     return false;
   }
 
-  return (*rpcs_.begin())->passthroughSupported();
+  const bool supported = (*rpcs_.begin())->passthroughSupported();
+#if defined(__linux__)
+  recordPassthroughGate(supported ? PassthroughGateResult::Active
+                                  : PassthroughGateResult::FilterRejected);
+#endif
+  return supported;
 }
 
 bool ConnectionManager::headerKeysPreserveCase() const { return config_->headerKeysPreserveCase(); }
@@ -300,7 +359,12 @@ void ConnectionManager::ResponseDecoder::finalizeResponse() {
     throw EnvoyException("downstream connection is closed");
   }
 
+#if defined(__linux__)
+  Buffer::OwnedImpl buffer(Network::Ubsocket::createOutputSliceFactory(
+      Network::Ubsocket::OutputBufferRole::ResponseFrame));
+#else
   Buffer::OwnedImpl buffer;
+#endif
 
   // Use the factory to get the concrete transport from the decoder transport (as opposed to
   // potentially pre-detection auto transport).
@@ -772,8 +836,8 @@ FilterStatus ConnectionManager::ActiveRpc::transportBegin(MessageMetadataSharedP
   // E2 TTHeader 解析完成，trace 在此刻才可知。
   // 这一步同时把 E1 暂存的事件回填到该 trace，并确定后续点是否记录。
   KITEX_PROBE_BIND(parent_.read_callbacks_->connection().id(),
-                   metadata->hasSequenceId() ? metadata->sequenceId() : 0,
-                   traceparentOf(*metadata), parent_.time_source_);
+                   metadata->hasSequenceId() ? metadata->sequenceId() : 0, traceparentOf(*metadata),
+                   parent_.time_source_);
   return applyDecoderFilters(DecoderEvent::TransportBegin, metadata);
 }
 

@@ -11,6 +11,9 @@
 #include "source/common/buffer/buffer_impl.h"
 #include "source/common/common/linked_object.h"
 #include "source/common/common/logger.h"
+#if defined(__linux__)
+#include "source/common/network/ub_socket_handle_impl.h"
+#endif
 #include "source/common/stats/timespan_impl.h"
 #include "source/common/stream_info/stream_info_impl.h"
 #include "source/extensions/filters/network/thrift_proxy/decoder.h"
@@ -217,7 +220,13 @@ private:
           stream_id_(parent_.random_generator_.random()),
           stream_info_(parent_.time_source_,
                        parent_.read_callbacks_->connection().connectionInfoProviderSharedPtr(),
-                       StreamInfo::FilterState::LifeSpan::FilterChain) {
+                       StreamInfo::FilterState::LifeSpan::FilterChain)
+#if defined(__linux__)
+          ,
+          response_buffer_(Network::Ubsocket::createOutputSliceFactory(
+              Network::Ubsocket::OutputBufferRole::ResponsePayload))
+#endif
+    {
       parent_.stats_.request_active_.inc();
     }
     ~ActiveRpc() override {

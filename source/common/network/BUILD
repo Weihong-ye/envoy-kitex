@@ -295,6 +295,7 @@ envoy_cc_library(
         ":socket_interface_lib",
         ":socket_lib",
         "//envoy/common/io:io_uring_interface",
+        "//envoy/common:exception_lib",
         "//envoy/event:dispatcher_interface",
         "//envoy/network:io_handle_interface",
         "//source/common/api:os_sys_calls_lib",

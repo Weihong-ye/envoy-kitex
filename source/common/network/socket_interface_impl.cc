@@ -48,6 +48,10 @@ IoHandlePtr SocketInterfaceImpl::makePlatformSpecificSocket(
     return std::make_unique<UbSocketHandleImpl>(socket_fd, socket_v6only, domain,
                                                 options.max_addresses_cache_size_);
   }
+  if (domain == AF_UNIX && Ubsocket::udsZeroCopyEnabled()) {
+    return std::make_unique<UbUnixSocketHandleImpl>(socket_fd, socket_v6only, domain,
+                                                    options.max_addresses_cache_size_);
+  }
 #endif
 #if defined(__linux__) && !defined(__ANDROID_API__) && defined(ENVOY_ENABLE_IO_URING)
   // Only create IoUringSocketHandleImpl when the IoUringWorkerFactory has been created and it has
@@ -154,7 +158,9 @@ IoHandlePtr SocketInterfaceImpl::socket(Socket::Type socket_type,
                             addr->type() == Address::Type::Ip &&
                             ip_version == Address::IpVersion::v4 &&
                             (addr->ip()->addressAsString() == "141.61.17.202" ||
-                             addr->ip()->addressAsString() == "141.61.17.204");
+                             addr->ip()->addressAsString() == "141.61.17.204" ||
+                             addr->ip()->addressAsString() == "141.61.17.206" ||
+                             addr->ip()->addressAsString() == "141.61.17.208");
 
   IoHandlePtr io_handle;
   if (use_ubsocket) {

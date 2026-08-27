@@ -1,6 +1,9 @@
 #include "source/extensions/filters/network/thrift_proxy/router/upstream_request.h"
 
 #include "source/common/kitex_probe/probe.h"
+#if defined(__linux__)
+#include "source/common/network/ub_socket_handle_impl.h"
+#endif
 
 #include "source/extensions/filters/network/thrift_proxy/app_exception_impl.h"
 
@@ -91,7 +94,8 @@ void UpstreamRequest::onPoolReady(Tcp::ConnectionPool::ConnectionDataPtr&& conn_
   // 上游连接就绪。conn_pool_handle_ 非空表示本次是等待连接池分配后才到这里
   // （新建或排队），为空表示同步命中已有连接 —— 这个区别是建连成本归因的关键。
   KITEX_PROBE(parent_.downstreamConnectionId(),
-              continue_decoding ? "up_conn_new" : "up_conn_reused", parent_.dispatcher().timeSource());
+              continue_decoding ? "up_conn_new" : "up_conn_reused",
+              parent_.dispatcher().timeSource());
 
   onUpstreamHostSelected(host);
   host->outlierDetector().putResult(Upstream::Outlier::Result::LocalOriginConnectSuccess);
@@ -268,7 +272,12 @@ void UpstreamRequest::onEvent(Network::ConnectionEvent event) {
 }
 
 uint64_t UpstreamRequest::encodeAndWrite(Buffer::OwnedImpl& request_buffer) {
+#if defined(__linux__)
+  Buffer::OwnedImpl transport_buffer(Network::Ubsocket::createOutputSliceFactory(
+      Network::Ubsocket::OutputBufferRole::UpstreamTransport));
+#else
   Buffer::OwnedImpl transport_buffer;
+#endif
 
   const uint64_t dn_id = parent_.downstreamConnectionId();
 

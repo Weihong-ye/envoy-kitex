@@ -13,6 +13,9 @@
 #include "source/common/http/header_utility.h"
 #include "source/common/router/metadatamatchcriteria_impl.h"
 #include "source/common/upstream/load_balancer_context_base.h"
+#if defined(__linux__)
+#include "source/common/network/ub_socket_handle_impl.h"
+#endif
 #include "source/extensions/filters/network/thrift_proxy/conn_manager.h"
 #include "source/extensions/filters/network/thrift_proxy/filters/filter.h"
 #include "source/extensions/filters/network/thrift_proxy/router/router.h"
@@ -230,8 +233,14 @@ class Router : public Tcp::ConnectionPool::UpstreamCallbacks,
 public:
   Router(Upstream::ClusterManager& cluster_manager, const RouterStats& stats,
          Runtime::Loader& runtime, ShadowWriter& shadow_writer, bool close_downstream_on_error)
-      : RequestOwner(cluster_manager, stats), runtime_(runtime), shadow_writer_(shadow_writer),
-        close_downstream_on_error_(close_downstream_on_error) {}
+      : RequestOwner(cluster_manager, stats),
+#if defined(__linux__)
+        upstream_request_buffer_(Network::Ubsocket::createOutputSliceFactory(
+            Network::Ubsocket::OutputBufferRole::RouterRequest)),
+#endif
+        runtime_(runtime), shadow_writer_(shadow_writer),
+        close_downstream_on_error_(close_downstream_on_error) {
+  }
 
   ~Router() override = default;
 

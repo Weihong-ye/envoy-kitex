@@ -31,6 +31,7 @@ envoy_cc_library(
         "//envoy/tcp:conn_pool_interface",
         "//source/common/buffer:buffer_lib",
         "//source/common/common:logger_lib",
+        "//source/common/network:default_socket_interface_lib",
         "//source/extensions/filters/network:well_known_names",
         "//source/extensions/filters/network/thrift_proxy:app_exception_lib",
         "//source/extensions/filters/network/thrift_proxy:metadata_lib",
@@ -57,6 +58,7 @@ envoy_cc_library(
         ":router_interface",
         "//envoy/tcp:conn_pool_interface",
         "//source/common/common:logger_lib",
+        "//source/common/network:default_socket_interface_lib",
         "//source/extensions/filters/network/thrift_proxy:app_exception_lib",
         "//source/extensions/filters/network/thrift_proxy:conn_manager_lib",
         "//source/extensions/filters/network/thrift_proxy:thrift_object_interface",
@@ -94,6 +96,7 @@ envoy_cc_library(
     hdrs = ["router_impl.h"],
     deps = [
         "//source/common/kitex_probe:kitex_probe_lib",
+        "//source/common/network:default_socket_interface_lib",
         ":router_interface",
         ":router_ratelimit_lib",
         ":shadow_writer_lib",

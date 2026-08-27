@@ -13,6 +13,9 @@
 
 #include "source/common/buffer/buffer_impl.h"
 #include "source/common/common/logger.h"
+#if defined(__linux__)
+#include "source/common/network/ub_socket_handle_impl.h"
+#endif
 #include "source/extensions/filters/network/thrift_proxy/app_exception_impl.h"
 #include "source/extensions/filters/network/thrift_proxy/metadata.h"
 #include "source/extensions/filters/network/thrift_proxy/protocol_converter.h"
@@ -591,10 +594,48 @@ protected:
       return t == TransportType::Framed || t == TransportType::Header ||
              t == TransportType::TTHeader;
     };
-    const auto passthrough_supported = supports_passthrough(transport) &&
-                                       supports_passthrough(final_transport) &&
-                                       protocol == final_protocol &&
-                                       final_protocol != ProtocolType::Twitter;
+    const auto passthrough_supported =
+        supports_passthrough(transport) && supports_passthrough(final_transport) &&
+        protocol == final_protocol && final_protocol != ProtocolType::Twitter;
+#if defined(__linux__)
+    if (Network::Ubsocket::diagnosticsLoggingEnabled()) {
+      struct PassthroughCompatibilityStats {
+        uint64_t checks{0};
+        uint64_t supported{0};
+        uint64_t downstream_transport_unsupported{0};
+        uint64_t upstream_transport_unsupported{0};
+        uint64_t protocol_mismatch{0};
+        uint64_t twitter_protocol{0};
+      };
+      static thread_local PassthroughCompatibilityStats compatibility_stats;
+      ++compatibility_stats.checks;
+      if (passthrough_supported) {
+        ++compatibility_stats.supported;
+      }
+      if (!supports_passthrough(transport)) {
+        ++compatibility_stats.downstream_transport_unsupported;
+      }
+      if (!supports_passthrough(final_transport)) {
+        ++compatibility_stats.upstream_transport_unsupported;
+      }
+      if (protocol != final_protocol) {
+        ++compatibility_stats.protocol_mismatch;
+      }
+      if (final_protocol == ProtocolType::Twitter) {
+        ++compatibility_stats.twitter_protocol;
+      }
+      if (Network::Ubsocket::diagnosticsStatsLogDue(compatibility_stats.checks)) {
+        ENVOY_LOG(info,
+                  "[UB_ZC_THRIFT_COMPAT] checks={} supported={} "
+                  "downstream_transport_unsupported={} upstream_transport_unsupported={} "
+                  "protocol_mismatch={} twitter_protocol={}",
+                  compatibility_stats.checks, compatibility_stats.supported,
+                  compatibility_stats.downstream_transport_unsupported,
+                  compatibility_stats.upstream_transport_unsupported,
+                  compatibility_stats.protocol_mismatch, compatibility_stats.twitter_protocol);
+      }
+    }
+#endif
     UpstreamRequestInfo result = {passthrough_supported, final_transport, final_protocol,
                                   conn_pool_data};
     return {std::nullopt, result};

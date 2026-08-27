@@ -38,6 +38,7 @@ class Slice {
 public:
   using Reservation = RawSlice;
   using StoragePtr = std::unique_ptr<uint8_t[]>;
+  using Releasor = std::function<void()>;
 
   struct SizedStorage {
     StoragePtr mem_;
@@ -85,6 +86,21 @@ public:
   }
 
   /**
+   * Create an empty mutable Slice backed by externally allocated storage.
+   *
+   * The releasor owns the storage lifetime. External mutable slices are appendable while they
+   * remain in a buffer, but are deliberately not coalesced during Buffer::move(), because doing so
+   * would copy hardware-owned storage into a destination heap slice.
+   */
+  Slice(uint8_t* storage, uint64_t capacity, Releasor releasor)
+      : capacity_(capacity), base_(storage), releasor_(std::move(releasor)),
+        mutable_external_(true) {
+    ASSERT(storage != nullptr);
+    ASSERT(capacity != 0);
+    ASSERT(releasor_ != nullptr);
+  }
+
+  /**
    * Create an immutable Slice that refers to an external buffer fragment.
    * @param fragment provides externally owned immutable data.
    */
@@ -103,12 +119,14 @@ public:
     reservable_ = rhs.reservable_;
     drain_trackers_ = std::move(rhs.drain_trackers_);
     account_ = std::move(rhs.account_);
+    mutable_external_ = rhs.mutable_external_;
     releasor_.swap(rhs.releasor_);
 
     rhs.capacity_ = 0;
     rhs.base_ = nullptr;
     rhs.data_ = 0;
     rhs.reservable_ = 0;
+    rhs.mutable_external_ = false;
   }
 
   Slice& operator=(Slice&& rhs) noexcept {
@@ -122,6 +140,7 @@ public:
       reservable_ = rhs.reservable_;
       drain_trackers_ = std::move(rhs.drain_trackers_);
       account_ = std::move(rhs.account_);
+      mutable_external_ = rhs.mutable_external_;
       if (releasor_) {
         releasor_();
       }
@@ -132,6 +151,7 @@ public:
       rhs.base_ = nullptr;
       rhs.data_ = 0;
       rhs.reservable_ = 0;
+      rhs.mutable_external_ = false;
     }
 
     return *this;
@@ -147,7 +167,7 @@ public:
   /**
    * @return true if the data in the slice is mutable
    */
-  bool isMutable() const { return storage_ != nullptr; }
+  bool isMutable() const { return storage_ != nullptr || mutable_external_; }
 
   /**
    * @return true if content in this Slice can be coalesced into another Slice.
@@ -335,7 +355,7 @@ public:
    * - the slice owns backing memory
    */
   void maybeChargeAccount(const BufferMemoryAccountSharedPtr& account) {
-    if (account_ != nullptr || storage_ == nullptr || account == nullptr) {
+    if (account_ != nullptr || !isMutable() || account == nullptr) {
       return;
     }
     account->charge(capacity_);
@@ -395,7 +415,10 @@ protected:
   BufferMemoryAccountSharedPtr account_;
 
   /** The releasor for the BufferFragment */
-  std::function<void()> releasor_;
+  Releasor releasor_;
+
+  /** Whether externally owned storage is mutable. */
+  bool mutable_external_{false};
 };
 
 class OwnedImpl;
@@ -642,11 +665,14 @@ private:
  */
 class OwnedImpl : public LibEventInstance {
 public:
+  using SliceFactory = std::function<Slice(uint64_t)>;
+
   OwnedImpl();
   OwnedImpl(absl::string_view data);
   OwnedImpl(const Instance& data);
   OwnedImpl(const void* data, uint64_t size);
   OwnedImpl(BufferMemoryAccountSharedPtr account);
+  explicit OwnedImpl(SliceFactory slice_factory);
 
   // Buffer::Instance
   void addDrainTracker(std::function<void()> drain_tracker) override;
@@ -741,6 +767,7 @@ private:
 
   void addImpl(const void* data, uint64_t size);
   void drainImpl(uint64_t size);
+  Slice makeSlice(uint64_t min_capacity);
 
   /**
    * Moves contents of the `other_slice` by either taking its ownership or coalescing it
@@ -756,6 +783,9 @@ private:
   OverflowDetectingUInt64 length_;
 
   BufferMemoryAccountSharedPtr account_;
+
+  /** Optional per-buffer storage policy. Empty preserves the standard heap-backed behavior. */
+  SliceFactory slice_factory_;
 
   struct OwnedImplReservationSlicesOwner : public ReservationSlicesOwner {
     virtual absl::Span<Slice::SizedStorage> ownedStorages() PURE;

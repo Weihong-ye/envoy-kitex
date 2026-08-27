@@ -90,6 +90,7 @@ envoy_cc_library(
         "//source/common/common:assert_lib",
         "//source/common/common:linked_object",
         "//source/common/common:logger_lib",
+        "//source/common/network:default_socket_interface_lib",
         "//source/common/network:filter_lib",
         "//source/common/stats:timespan_lib",
         "//source/common/stream_info:stream_info_lib",
@@ -125,6 +126,8 @@ envoy_cc_library(
         ":stats_lib",
         ":transport_interface",
         "//source/common/buffer:buffer_lib",
+        "//source/common/common:logger_lib",
+        "//source/common/network:default_socket_interface_lib",
         "//source/extensions/filters/network/thrift_proxy/filters:filter_interface",
     ],
 )

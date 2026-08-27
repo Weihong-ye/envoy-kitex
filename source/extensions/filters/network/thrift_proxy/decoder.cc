@@ -4,7 +4,11 @@
 
 #include "source/common/buffer/buffer_impl.h"
 #include "source/common/common/assert.h"
+#include "source/common/common/logger.h"
 #include "source/common/common/macros.h"
+#if defined(__linux__)
+#include "source/common/network/ub_socket_handle_impl.h"
+#endif
 #include "source/extensions/filters/network/thrift_proxy/app_exception_impl.h"
 #include "source/extensions/filters/network/thrift_proxy/thrift.h"
 
@@ -13,6 +17,67 @@ namespace Extensions {
 namespace NetworkFilters {
 namespace ThriftProxy {
 
+#if defined(__linux__)
+namespace {
+
+struct PassthroughMoveStats {
+  uint64_t frames{0};
+  uint64_t bytes{0};
+  uint64_t ownership_moved_bytes{0};
+  uint64_t partial_copy_bytes{0};
+  uint64_t source_slices{0};
+  uint64_t max_source_slices{0};
+};
+
+PassthroughMoveStats& passthroughMoveStats() {
+  static thread_local PassthroughMoveStats stats;
+  return stats;
+}
+
+void recordPassthroughMove(const Buffer::Instance& buffer, uint64_t body_bytes) {
+  if (!Network::Ubsocket::diagnosticsLoggingEnabled()) {
+    return;
+  }
+
+  const Buffer::RawSliceVector slices = buffer.getRawSlices();
+  uint64_t remaining = body_bytes;
+  uint64_t ownership_moved_bytes = 0;
+  uint64_t partial_copy_bytes = 0;
+  uint64_t visited_slices = 0;
+  for (const Buffer::RawSlice& slice : slices) {
+    if (remaining == 0) {
+      break;
+    }
+    ++visited_slices;
+    const uint64_t consumed = std::min<uint64_t>(remaining, slice.len_);
+    if (consumed == slice.len_) {
+      ownership_moved_bytes += consumed;
+    } else {
+      partial_copy_bytes += consumed;
+    }
+    remaining -= consumed;
+  }
+
+  PassthroughMoveStats& stats = passthroughMoveStats();
+  ++stats.frames;
+  stats.bytes += body_bytes;
+  stats.ownership_moved_bytes += ownership_moved_bytes;
+  stats.partial_copy_bytes += partial_copy_bytes;
+  stats.source_slices += visited_slices;
+  stats.max_source_slices = std::max(stats.max_source_slices, visited_slices);
+  if (!Network::Ubsocket::diagnosticsStatsLogDue(stats.frames)) {
+    return;
+  }
+  ENVOY_LOG_MISC(info,
+                 "[UB_ZC_THRIFT_MOVE] frames={} bytes={} ownership_moved_bytes={} "
+                 "partial_copy_bytes={} source_slices={} max_source_slices={}",
+                 stats.frames, stats.bytes, stats.ownership_moved_bytes, stats.partial_copy_bytes,
+                 stats.source_slices, stats.max_source_slices);
+}
+
+} // namespace
+#endif
+
 // PassthroughData -> PassthroughData
 // PassthroughData -> MessageEnd (all body bytes received)
 DecoderStateMachine::DecoderStatus DecoderStateMachine::passthroughData(Buffer::Instance& buffer) {
@@ -20,6 +85,9 @@ DecoderStateMachine::DecoderStatus DecoderStateMachine::passthroughData(Buffer::
     return {ProtocolState::WaitForData};
   }
 
+#if defined(__linux__)
+  recordPassthroughMove(buffer, body_bytes_);
+#endif
   Buffer::OwnedImpl body;
   body.move(buffer, body_bytes_);
 

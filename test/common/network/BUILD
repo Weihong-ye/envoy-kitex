@@ -522,6 +522,7 @@ envoy_cc_test(
     deps = [
         "//source/common/buffer:buffer_lib",
         "//source/common/network:default_socket_interface_lib",
+        "//test/test_common:environment_lib",
         "@abseil-cpp//absl/strings",
     ],
 )
