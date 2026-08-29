@@ -1,7 +1,5 @@
 #include "source/extensions/filters/network/thrift_proxy/router/router_impl.h"
 
-#include "source/common/kitex_probe/probe.h"
-
 #include <memory>
 
 #include "envoy/extensions/filters/network/thrift_proxy/v3/route.pb.h"
@@ -9,6 +7,7 @@
 #include "envoy/upstream/thread_local_cluster.h"
 
 #include "source/common/common/utility.h"
+#include "source/common/kitex_probe/probe.h"
 #include "source/common/router/metadatamatchcriteria_impl.h"
 #include "source/extensions/filters/network/thrift_proxy/app_exception_impl.h"
 
@@ -345,6 +344,10 @@ FilterStatus Router::messageBegin(MessageMetadataSharedPtr metadata) {
 
 FilterStatus Router::messageEnd() {
   ProtocolConverter::messageEnd();
+  if (callbacks_->connection() != nullptr) {
+    KITEX_PROBE_IF_SAMPLED(callbacks_->connection()->id(), "req_body_encode_done",
+                           callbacks_->streamInfo().timeSource());
+  }
   const auto encode_size = upstream_request_->encodeAndWrite(upstream_request_buffer_);
   // E6 请求已编码并写往上游
   if (callbacks_->connection() != nullptr) {

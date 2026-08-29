@@ -141,6 +141,8 @@ private:
     bool passthrough_ : 1 = false;
     bool pending_transport_end_ : 1 = false;
     bool body_mode_recorded_ : 1 = false;
+    bool payload_probe_recorded_ : 1 = false;
+    std::optional<MonotonicTime> payload_probe_candidate_;
   };
   using ResponseDecoderPtr = std::unique_ptr<ResponseDecoder>;
 
@@ -382,6 +384,8 @@ private:
     bool passthrough_ : 1 = false;
     bool under_on_local_reply_ : 1 = false;
     bool body_mode_recorded_ : 1 = false;
+    bool payload_probe_recorded_ : 1 = false;
+    std::optional<MonotonicTime> payload_probe_candidate_;
   };
 
   using ActiveRpcPtr = std::unique_ptr<ActiveRpc>;
