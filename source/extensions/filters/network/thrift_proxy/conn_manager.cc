@@ -327,7 +327,11 @@ bool ConnectionManager::ResponseDecoder::onData(Buffer::Instance& data) {
 }
 
 FilterStatus ConnectionManager::ResponseDecoder::transportBegin(MessageMetadataSharedPtr metadata) {
-  return parent_.applyEncoderFilters(DecoderEvent::TransportBegin, metadata, protocol_converter_);
+  const FilterStatus status =
+      parent_.applyEncoderFilters(DecoderEvent::TransportBegin, metadata, protocol_converter_);
+  KITEX_PROBE_IF_SAMPLED(parent_.parent_.read_callbacks_->connection().id(),
+                         "resp_transport_begin_done", parent_.parent_.time_source_);
+  return status;
 }
 
 FilterStatus ConnectionManager::ResponseDecoder::transportEnd() {
@@ -415,6 +419,11 @@ void ConnectionManager::ResponseDecoder::finalizeResponse() {
 
 FilterStatus ConnectionManager::ResponseDecoder::passthroughData(Buffer::Instance& data) {
   passthrough_ = true;
+  if (!body_mode_recorded_) {
+    body_mode_recorded_ = true;
+    KITEX_PROBE_IF_SAMPLED(parent_.parent_.read_callbacks_->connection().id(),
+                           "resp_body_passthrough", parent_.parent_.time_source_);
+  }
 
   return parent_.applyEncoderFilters(DecoderEvent::PassthroughData, &data, protocol_converter_);
 }
@@ -462,15 +471,27 @@ FilterStatus ConnectionManager::ResponseDecoder::messageBegin(MessageMetadataSha
 
   parent_.recordResponseAccessLog(metadata);
 
-  return parent_.applyEncoderFilters(DecoderEvent::MessageBegin, metadata, protocol_converter_);
+  const FilterStatus status =
+      parent_.applyEncoderFilters(DecoderEvent::MessageBegin, metadata, protocol_converter_);
+  KITEX_PROBE_IF_SAMPLED(parent_.parent_.read_callbacks_->connection().id(),
+                         "resp_message_begin_done", parent_.parent_.time_source_);
+  return status;
 }
 
 FilterStatus ConnectionManager::ResponseDecoder::messageEnd() {
-  return parent_.applyEncoderFilters(DecoderEvent::MessageEnd, absl::monostate(),
-                                     protocol_converter_);
+  const FilterStatus status =
+      parent_.applyEncoderFilters(DecoderEvent::MessageEnd, absl::monostate(), protocol_converter_);
+  KITEX_PROBE_IF_SAMPLED(parent_.parent_.read_callbacks_->connection().id(),
+                         "resp_message_end_done", parent_.parent_.time_source_);
+  return status;
 }
 
 FilterStatus ConnectionManager::ResponseDecoder::structBegin(absl::string_view name) {
+  if (!body_mode_recorded_) {
+    body_mode_recorded_ = true;
+    KITEX_PROBE_IF_SAMPLED(parent_.parent_.read_callbacks_->connection().id(),
+                           "resp_body_full_decode", parent_.parent_.time_source_);
+  }
   return parent_.applyEncoderFilters(DecoderEvent::StructBegin, std::string(name),
                                      protocol_converter_);
 }
@@ -976,6 +997,11 @@ void ConnectionManager::ActiveRpc::recordResponseAccessLog(const std::string& me
 
 FilterStatus ConnectionManager::ActiveRpc::passthroughData(Buffer::Instance& data) {
   passthrough_ = true;
+  if (!body_mode_recorded_) {
+    body_mode_recorded_ = true;
+    KITEX_PROBE_IF_SAMPLED(parent_.read_callbacks_->connection().id(), "req_body_passthrough",
+                           parent_.time_source_);
+  }
   return applyDecoderFilters(DecoderEvent::PassthroughData, &data);
 }
 
@@ -1057,6 +1083,11 @@ FilterStatus ConnectionManager::ActiveRpc::messageEnd() {
 }
 
 FilterStatus ConnectionManager::ActiveRpc::structBegin(absl::string_view name) {
+  if (!body_mode_recorded_) {
+    body_mode_recorded_ = true;
+    KITEX_PROBE_IF_SAMPLED(parent_.read_callbacks_->connection().id(), "req_body_full_decode",
+                           parent_.time_source_);
+  }
   return applyDecoderFilters(DecoderEvent::StructBegin, std::string(name));
 }
 

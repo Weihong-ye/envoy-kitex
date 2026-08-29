@@ -81,6 +81,14 @@ void connSlot(uint64_t conn_id, Slot which, MonotonicTime mono);
 void rpcEvent(uint64_t conn_id, absl::string_view point, MonotonicTime mono);
 
 /**
+ * Record an RPC event while avoiding a clock read for unbound or unsampled RPCs.
+ *
+ * This is intended for fine-grained phase probes: checking the binding is cheaper than adding a
+ * monotonic clock read to every request merely to discard the event in rpcEvent().
+ */
+void rpcEventIfSampled(uint64_t conn_id, absl::string_view point, TimeSource& time_source);
+
+/**
  * 记录**响应写出**这类「RPC 已结束但事件还没发生」的点位。
  *
  * 下游 writev 是异步的：conn_manager 里 write() 只入队，真正的 writev 由事件
@@ -152,6 +160,9 @@ Stats stats();
 #define KITEX_PROBE(conn_id, point, time_source)                                                   \
   ::Envoy::KitexProbe::rpcEvent((conn_id), (point), (time_source).monotonicTime())
 
+#define KITEX_PROBE_IF_SAMPLED(conn_id, point, time_source)                                        \
+  ::Envoy::KitexProbe::rpcEventIfSampled((conn_id), (point), (time_source))
+
 #define KITEX_PROBE_END(conn_id) ::Envoy::KitexProbe::endRpc((conn_id))
 
 #define KITEX_PROBE_SAMPLED(conn_id) ::Envoy::KitexProbe::isSampled((conn_id))
@@ -179,6 +190,9 @@ Stats stats();
   do {                                                                                             \
   } while (0)
 #define KITEX_PROBE(conn_id, point, time_source)                                                   \
+  do {                                                                                             \
+  } while (0)
+#define KITEX_PROBE_IF_SAMPLED(conn_id, point, time_source)                                        \
   do {                                                                                             \
   } while (0)
 #define KITEX_PROBE_END(conn_id)                                                                   \

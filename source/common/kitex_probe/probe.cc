@@ -444,6 +444,21 @@ void rpcEvent(uint64_t conn_id, absl::string_view point, MonotonicTime mono) {
   push(st, Event{b.trace, point, m, b.base_wall + (m - b.base_mono), b.seq_id});
 }
 
+void rpcEventIfSampled(uint64_t conn_id, absl::string_view point, TimeSource& time_source) {
+  if (!config().enabled) {
+    return;
+  }
+  auto& st = tls();
+  auto it = st.bindings.find(conn_id);
+  if (it == st.bindings.end() || !it->second.sampled) {
+    return;
+  }
+
+  const auto& b = it->second;
+  const int64_t m = monoNs(time_source.monotonicTime());
+  push(st, Event{b.trace, point, m, b.base_wall + (m - b.base_mono), b.seq_id});
+}
+
 void rpcEventTail(uint64_t conn_id, absl::string_view point, MonotonicTime mono, bool last) {
   if (!config().enabled) {
     return;

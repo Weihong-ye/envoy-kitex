@@ -282,6 +282,7 @@ uint64_t UpstreamRequest::encodeAndWrite(Buffer::OwnedImpl& request_buffer) {
   const uint64_t dn_id = parent_.downstreamConnectionId();
 
   metadata_->setProtocol(protocol_->type());
+  KITEX_PROBE_IF_SAMPLED(dn_id, "up_frame_encode_start", parent_.dispatcher().timeSource());
   transport_->encodeFrame(transport_buffer, *metadata_, request_buffer);
   // 编码与写出原本合在一个区间里（7～16µs），分不清是编码慢还是写慢
   KITEX_PROBE(dn_id, "up_encode_done", parent_.dispatcher().timeSource());
@@ -300,6 +301,8 @@ void UpstreamRequest::onRequestStart(bool continue_decoding) {
 
   metadata_->setSequenceId(conn_state_->nextSequenceId());
   parent_.convertMessageBegin(metadata_);
+  KITEX_PROBE_IF_SAMPLED(parent_.downstreamConnectionId(), "up_body_start",
+                         parent_.dispatcher().timeSource());
 
   if (continue_decoding) {
     parent_.continueDecoding();
